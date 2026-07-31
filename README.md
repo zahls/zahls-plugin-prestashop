@@ -9,9 +9,10 @@ Accept TWINT, cards, PostFinance and more in PrestaShop via [zahls.ch](https://w
 
 ## Install
 
-1. Zip the `zahls` folder and upload it in PrestaShop → Modules → Upload a module.
-2. Configure instance name and API secret from zahls.ch → API & Integrations.
-3. Activate payment methods and set the webhook in your zahls.ch dashboard.
+1. Download [`zahls.zip`](https://github.com/zahls/zahls-plugin-prestashop/releases/latest/download/zahls.zip) from the [latest release](https://github.com/zahls/zahls-plugin-prestashop/releases/latest).
+2. Upload it in PrestaShop → Modules → Module Manager → Upload a module.
+3. Configure instance name and API secret from zahls.ch → API & Integrations.
+4. Activate payment methods and set the webhook in your zahls.ch dashboard.
 
 ## License
 
