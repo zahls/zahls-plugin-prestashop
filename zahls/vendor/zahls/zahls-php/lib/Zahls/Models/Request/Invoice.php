@@ -1,0 +1,393 @@
+<?php
+
+/**
+ * The Invoice request model
+ *
+ * @author    zahls <info@zahls.ch>
+ * @copyright zahls
+ * @since     v1.0
+ */
+
+namespace Zahls\Models\Request;
+
+use Zahls\Models\Base;
+use Zahls\Models\Response\Invoice as ResponseInvoice;
+
+/**
+ * Class Invoice
+ *
+ * @package Zahls\Models\Request
+ */
+class Invoice extends Base
+{
+    public const CURRENCY_CHF = 'CHF';
+    public const CURRENCY_EUR = 'EUR';
+    public const CURRENCY_USD = 'USD';
+    public const CURRENCY_GBP = 'GBP';
+
+    // mandatory
+    protected string $currency = '';
+    protected int $amount = 0;
+    
+    // Optional
+    protected string $referenceId = '';
+    protected string $title = '';
+    protected string $description = '';
+    protected array $psp = [];
+    protected array $pm;
+    protected string $name = '';
+    protected array|string $purpose = '';
+    protected string $buttonText = '';
+    protected ?float $vatRate = null;
+    protected ?string $sku = '';
+    protected bool $preAuthorization = false;
+    protected bool $reservation = false;
+    protected string $successRedirectUrl;
+    protected string $failedRedirectUrl;
+    protected bool $subscriptionState = false;
+    protected string $subscriptionInterval = '';
+    protected string $subscriptionPeriod = '';
+    protected string $subscriptionPeriodMinAmount = '';
+    protected string $subscriptionCancellationInterval = '';
+    protected array $fields = [];
+    protected ?string $concardisOrderId = '';
+    protected string $expirationDate;
+
+    public function getReferenceId(): string
+    {
+        return $this->referenceId;
+    }
+
+    /**
+     * Set the reference id which you will get in Webhook,
+     * this reference id won't be shown to customer
+     */
+    public function setReferenceId(string $referenceId): void
+    {
+        $this->referenceId = $referenceId;
+    }
+
+    public function getTitle(): string
+    {
+        return $this->title;
+    }
+
+    /**
+     * Set the payment page headline title
+     */
+    public function setTitle(string $title): void
+    {
+        $this->title = $title;
+    }
+
+    public function getDescription(): string
+    {
+        return $this->description;
+    }
+
+    /**
+     * Set the description text which will be displayed
+     * above the payment form
+     */
+    public function setDescription(string $description): void
+    {
+        $this->description = $description;
+    }
+
+    public function getPsp(): array
+    {
+        return $this->psp;
+    }
+
+    /**
+     * Set the payment service provider to use, a
+     * list of available payment service providers (short psp)
+     * can be found here: https://docs.zahls.ch/developer/general-info/payment-provider
+     */
+    public function setPsp(array $psp): void
+    {
+        $this->psp = $psp;
+    }
+
+    public function getPm(): array
+    {
+        return $this->pm;
+    }
+
+    public function setPm(array $pm): void
+    {
+        $this->pm = $pm;
+    }
+
+    public function getName(): string
+    {
+        return $this->name;
+    }
+
+    /**
+     * Set the internal name of the form which will be generated.
+     * This name will only be shown to administrator of the Zahls site.
+     */
+    public function setName(string $name): void
+    {
+        $this->name = $name;
+    }
+
+    public function getPurpose(): string|array
+    {
+        return $this->purpose;
+    }
+
+    /**
+     * Set the payment purpose which will be inserted automatically.
+     * This field won't be editable anymore for the client if you predefine it.
+     */
+    public function setPurpose(string|array $purpose): void
+    {
+        $this->purpose = $purpose;
+    }
+
+    public function getButtonText(): string
+    {
+        return $this->buttonText;
+    }
+
+    public function setButtonText(string $buttonText): void
+    {
+        $this->buttonText = $buttonText;
+    }
+
+    public function getAmount(): int
+    {
+        return $this->amount;
+    }
+
+    /**
+     * Set the payment amount. Make sure the amount is multiplied
+     * by 100!
+     */
+    public function setAmount(int $amount): void
+    {
+        $this->amount = $amount;
+    }
+
+    public function getVatRate(): ?float
+    {
+        return $this->vatRate;
+    }
+
+    public function setVatRate(?float $vatRate): void
+    {
+        $this->vatRate = $vatRate;
+    }
+
+    public function getSku(): ?string
+    {
+        return $this->sku;
+    }
+
+    public function setSku(?string $sku): void
+    {
+        $this->sku = $sku;
+    }
+
+    public function getCurrency(): string
+    {
+        return $this->currency;
+    }
+
+    /**
+     * Set the corresponding payment currency for the amount.
+     * You can use the ISO Code.
+     */
+    public function setCurrency(string $currency): void
+    {
+        $this->currency = $currency;
+    }
+
+    public function getPreAuthorization(): bool
+    {
+        return $this->preAuthorization;
+    }
+
+    /**
+     *  Whether charge payment manually at a later date (type authorization).
+     *  Note: Subscription and authorization can not be combined.
+     */
+    public function setPreAuthorization(bool $preAuthorization): void
+    {
+        $this->preAuthorization = $preAuthorization;
+    }
+
+    public function getReservation(): bool
+    {
+        return $this->reservation;
+    }
+
+    /**
+     *  Whether charge payment manually at a later date (type reservation).
+     *  Note: Subscription and reservation can not be combined.
+     */
+    public function setReservation(bool $reservation): void
+    {
+        $this->reservation = $reservation;
+    }
+
+    public function getSuccessRedirectUrl(): string
+    {
+        return $this->successRedirectUrl;
+    }
+
+    public function setSuccessRedirectUrl(string $successRedirectUrl): void
+    {
+        $this->successRedirectUrl = $successRedirectUrl;
+    }
+
+    public function getFailedRedirectUrl(): string
+    {
+        return $this->failedRedirectUrl;
+    }
+
+    public function setFailedRedirectUrl(string $failedRedirectUrl): void
+    {
+        $this->failedRedirectUrl = $failedRedirectUrl;
+    }
+
+    public function isSubscriptionState(): bool
+    {
+        return $this->subscriptionState;
+    }
+
+    /**
+     * Set whether the payment should be a recurring payment (subscription)
+     * If you set to TRUE, you should provide a
+     * subscription interval, period and cancellation interval
+     * Note: Subscription and pre-authorization can not be combined.
+     */
+    public function setSubscriptionState(bool $subscriptionState): void
+    {
+        $this->subscriptionState = $subscriptionState;
+    }
+
+    public function getSubscriptionInterval(): string
+    {
+        return $this->subscriptionInterval;
+    }
+
+    /**
+     * Set the payment interval, this should be a string formatted like ISO 8601
+     * (PnYnMnDTnHnMnS)
+     *
+     * Use case:
+     * If you set this value to P6M the customer will pay every 6 months on this
+     * subscription.
+     *
+     * It is possible to define XY years / months or days.
+     *
+     * For further information see http://php.net/manual/en/class.dateinterval.php
+     */
+    public function setSubscriptionInterval(string $subscriptionInterval): void
+    {
+        $this->subscriptionInterval = $subscriptionInterval;
+    }
+
+    public function getSubscriptionPeriod(): string
+    {
+        return $this->subscriptionPeriod;
+    }
+
+    /**
+     * Set the subscription period after how many years / months or days the subscription
+     * will get renewed.
+     *
+     * This should be a string formatted like ISO 8601 (PnYnMnDTnHnMnS)
+     *
+     * Use case:
+     * If you set this value to P1Y the subscription will be renewed every year.
+     *
+     * It is possible to define XY years / months or days.
+     *
+     * For further information see http://php.net/manual/en/class.dateinterval.php
+     */
+    public function setSubscriptionPeriod(string $subscriptionPeriod): void
+    {
+        $this->subscriptionPeriod = $subscriptionPeriod;
+    }
+
+    public function getSubscriptionCancellationInterval(): string
+    {
+        return $this->subscriptionCancellationInterval;
+    }
+
+    /**
+     * Set the cancellation interval, it means you can define how many days or months
+     * the client has to cancel the subscription before the end of subscription period.
+     *
+     * This should be a string formatted like ISO 8601 (PnYnMnDTnHnMnS)
+     *
+     * Use case:
+     * If you set this value to P1M the subscription has to be cancelled one month
+     * before end of subscription period.
+     *
+     * It is possible to define XY months or days. Years are not supported here.
+     *
+     * For further information see http://php.net/manual/en/class.dateinterval.php
+     */
+    public function setSubscriptionCancellationInterval(string $subscriptionCancellationInterval): void
+    {
+        $this->subscriptionCancellationInterval = $subscriptionCancellationInterval;
+    }
+
+    public function getFields(): array
+    {
+        return $this->fields;
+    }
+
+    /**
+     * Define a new field of the payment page
+     *
+     * Reference link: https://developers.zahls.ch/reference/create-a-gateway -> fields
+     */
+    public function addField(string $type, bool $mandatory, ?string $defaultValue = '', string $name = ''): void
+    {
+        $this->fields[$type] = [
+            'name' => $name,
+            'mandatory' => $mandatory,
+            'defaultValue' => $defaultValue,
+        ];
+    }
+
+    public function getConcardisOrderId(): ?string
+    {
+        return $this->concardisOrderId;
+    }
+
+    /**
+     * Define an ORDER ID which should be used for the Concardis PSPs
+     */
+    public function setConcardisOrderId(?string $concardisOrderId): void
+    {
+        $this->concardisOrderId = $concardisOrderId;
+    }
+
+    /**
+     * Format: Y-m-d
+     */
+    public function getExpirationDate(): string
+    {
+        return $this->expirationDate;
+    }
+
+    /**
+     * Format: Y-m-d
+     */
+    public function setExpirationDate(string $expirationDate): void
+    {
+        $this->expirationDate = $expirationDate;
+    }
+
+    public function getResponseModel(): ResponseInvoice
+    {
+        return new ResponseInvoice();
+    }
+}

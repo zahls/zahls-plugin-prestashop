@@ -1,0 +1,34 @@
+{
+  "name": "zahls/prestashop-payment",
+  "description": "zahls.ch payment gateway for PrestaShop",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "zahls",
+      "homepage": "https://www.zahls.ch"
+    }
+  ],
+  "require": {
+    "php": "^8",
+    "zahls/zahls-php": "dev-main"
+  },
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/zahls/zahls-php.git"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Zahls\\ZahlsPaymentGateway\\": "src/"
+    }
+  },
+  "config": {
+    "preferred-install": "dist",
+    "prepend-autoloader": false
+  },
+  "type": "prestashop-module",
+  "homepage": "https://www.zahls.ch",
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}

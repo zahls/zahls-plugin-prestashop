@@ -1,0 +1,53 @@
+{
+    "name": "zahls/zahls-php",
+    "type": "library",
+    "description": "zahls.ch PHP SDK",
+    "keywords": [
+        "payment",
+        "gateway",
+        "zahls",
+        "twint",
+        "switzerland"
+    ],
+    "license": "MIT",
+    "homepage": "https://www.zahls.ch",
+    "authors": [
+        {
+            "name": "zahls",
+            "homepage": "https://www.zahls.ch"
+        }
+    ],
+    "support": {
+        "email": "support@zahls.ch",
+        "issues": "https://github.com/zahls/zahls-php/issues",
+        "source": "https://github.com/zahls/zahls-php"
+    },
+    "autoload": {
+        "psr-0": {
+            "Zahls": "lib/"
+        }
+    },
+    "require": {
+        "php": "^8.0",
+        "ext-curl": "*"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "guzzlehttp/guzzle": "^7.0",
+        "pestphp/pest": "^3.8"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "phpstan": "phpstan analyse lib/ --level=5",
+        "test": "./vendor/bin/pest ."
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    }
+}

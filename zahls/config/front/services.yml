@@ -1,0 +1,13 @@
+# zahls/config/services.yml
+services:
+  _defaults:
+    public: true
+
+  zahls.zahlspaymentgateway.zahlsdbservice:
+    class: Zahls\ZahlsPaymentGateway\Service\ZahlsDbService
+
+  zahls.zahlspaymentgateway.zahlsapiservice:
+    class: Zahls\ZahlsPaymentGateway\Service\ZahlsApiService
+
+  zahls.zahlspaymentgateway.zahlsorderservice:
+    class: Zahls\ZahlsPaymentGateway\Service\ZahlsOrderService
