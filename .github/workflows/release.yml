@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build module ZIP
+        run: zip -r zahls.zip zahls -x '*.DS_Store'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: zahls.zip
+          generate_release_notes: true
+          body: |
+            ## Install
+            1. Download `zahls.zip`
+            2. Upload via PrestaShop → Modules → Module Manager → Upload a module
+            3. Configure API key and instance name

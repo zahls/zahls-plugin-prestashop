@@ -1,0 +1,80 @@
+<?php
+
+/**
+ * The Base model class for request and response models.
+ *
+ * @author    zahls <info@zahls.ch>
+ * @copyright zahls
+ * @since     v1.0
+ */
+
+namespace Zahls\Models;
+
+/**
+ * Class Base
+ *
+ * @package Zahls\Models
+ */
+abstract class Base
+{
+    protected string $uuid;
+    protected int|string $id;
+
+    /**
+     * Converts array to response model
+     */
+    public function fromArray(array $data): static
+    {
+        foreach ($data as $param => $value) {
+            $method = 'set' . str_replace(' ', '', ucwords(str_replace('_', ' ', $param)));
+            if (!method_exists($this, $method)) {
+                continue;
+            }
+            $this->$method($value);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Convert object to an associative array
+     */
+    public function toArray(): array
+    {
+        $vars = get_object_vars($this);
+
+
+        return $vars + ['model' => $this->getPath()];
+    }
+
+    public function getPath(): string
+    {
+        $className = explode('\\', get_called_class());
+        return end($className);
+    }
+
+    /**
+     * Returns the corresponding response model object
+     */
+    public abstract function getResponseModel(): object;
+
+    public function getId(): int|string
+    {
+        return $this->id;
+    }
+
+    public function setId(int|string $id): void
+    {
+        $this->id = $id;
+    }
+
+    public function getUuid(): string
+    {
+        return $this->uuid;
+    }
+
+    public function setUuid(string $uuid): void
+    {
+        $this->uuid = $uuid;
+    }
+}
