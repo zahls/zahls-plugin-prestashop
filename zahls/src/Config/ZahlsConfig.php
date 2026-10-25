@@ -14,17 +14,12 @@ if (!defined('_PS_VERSION_')) {
 
 class ZahlsConfig
 {
-    public static function getPlatforms(): array
-    {
-        return [
-            'zahls.ch' => 'zahls.ch',
-        ];
-    }
+    /** zahls.ch is the only platform: api.zahls.ch, login.zahls.ch */
+    const PLATFORM = 'zahls.ch';
 
     public static function getConfigKeys(): array
     {
         return [
-            'ZAHLS_PLATFORM',
             'ZAHLS_API_SECRET',
             'ZAHLS_INSTANCE_NAME',
             'ZAHLS_LOOK_AND_FEEL_ID',

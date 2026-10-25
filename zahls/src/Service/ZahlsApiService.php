@@ -19,6 +19,7 @@ use Zahls\Models\Request\SignatureCheck;
 use Zahls\Models\Response\Gateway;
 use Zahls\Models\Response\Transaction;
 use Zahls\ZahlsException;
+use Zahls\ZahlsPaymentGateway\Config\ZahlsConfig;
 use Zahls\ZahlsPaymentGateway\Util\BasketUtil;
 
 class ZahlsApiService
@@ -31,7 +32,7 @@ class ZahlsApiService
     {
         $this->instanceName = \Configuration::get('ZAHLS_INSTANCE_NAME');
         $this->apiKey = \Configuration::get('ZAHLS_API_SECRET');
-        $this->platform = \Configuration::get('ZAHLS_PLATFORM') ?: 'zahls.ch';
+        $this->platform = ZahlsConfig::PLATFORM;
     }
 
     /**
@@ -206,12 +207,11 @@ class ZahlsApiService
      *
      * @param string $instance
      * @param string $apiKey
-     * @param string $platform
      * @return true|false
      */
-    public function validateSignature(string $instance, string $apiKey, string $platform): bool
+    public function validateSignature(string $instance, string $apiKey): bool
     {
-        $zahls = $this->getInterface($instance, $apiKey, $platform);
+        $zahls = $this->getInterface($instance, $apiKey, ZahlsConfig::PLATFORM);
         try {
             $zahls->getOne(new SignatureCheck());
             return true;
