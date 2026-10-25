@@ -9,7 +9,11 @@
 if (!defined('_PS_VERSION_')) {
     exit;
 }
+use Zahls\Models\Response\Transaction;
+use Zahls\ZahlsPaymentGateway\Config\ZahlsConfig;
+use Zahls\ZahlsPaymentGateway\Service\ZahlsApiService;
 use Zahls\ZahlsPaymentGateway\Service\ZahlsDbService;
+use Zahls\ZahlsPaymentGateway\Service\ZahlsOrderService;
 
 class zahlsValidationModuleFrontController extends ModuleFrontController
 {
@@ -31,15 +35,34 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
 
         if (version_compare(_PS_VERSION_, '1.7.6', '<')) {
             $zahlsDbService = new ZahlsDbService();
+            $zahlsApiService = new ZahlsApiService();
+            $zahlsOrderService = new ZahlsOrderService();
         } else {
             $zahlsDbService = $this->get('zahls.zahlspaymentgateway.zahlsdbservice');
+            $zahlsApiService = $this->get('zahls.zahlspaymentgateway.zahlsapiservice');
+            $zahlsOrderService = $this->get('zahls.zahlspaymentgateway.zahlsorderservice');
         }
-        $gatewayId = $this->context->cookie->paymentId;
+        $gatewayId = (int) $this->context->cookie->paymentId;
         $cartId = $zahlsDbService->getGatewayCartId($gatewayId);
+        if (!$cartId) {
+            $this->handleError(self::ERROR_CONFIG);
+        }
+
+        $order = Order::getByCartId($cartId);
+        if (!$order) {
+            // zahls redirects the customer right after the payment, usually before its
+            // webhook arrived: create the order from the transaction confirmed by zahls
+            $order = $this->createOrderFromGateway($gatewayId, $cartId, $zahlsApiService, $zahlsDbService, $zahlsOrderService);
+        }
 
         // Redirect to success page if successful order already exists
-        $order = Order::getByCartId($cartId);
-        if ($order && in_array($order->current_state, [2, 9, 10])) {
+        $successStates = [
+            (int) Configuration::get(ZahlsOrderService::PS_STATUS_PAYMENT),
+            (int) Configuration::get(ZahlsOrderService::PS_STATUS_BANKWIRE),
+            (int) Configuration::get('PS_OS_OUTOFSTOCK_PAID'),
+            (int) Configuration::get('PS_OS_OUTOFSTOCK_UNPAID'),
+        ];
+        if ($order && in_array((int) $order->current_state, $successStates, true)) {
             Tools::redirect(
                 'index.php?controller=order-confirmation&id_cart=' . $cartId .
                 '&id_module=' . $this->module->id .
@@ -49,6 +72,41 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
         }
 
         $this->handleError(self::ERROR_CONFIG);
+    }
+
+    /**
+     * @return Order|null
+     */
+    private function createOrderFromGateway($gatewayId, $cartId, $zahlsApiService, $zahlsDbService, $zahlsOrderService)
+    {
+        $gateway = $zahlsApiService->getZahlsGateway($gatewayId);
+        if (!$gateway || (int) $gateway->getReferenceId() !== (int) $cartId) {
+            return null;
+        }
+        $transaction = $zahlsApiService->getTransactionByGateway($gateway);
+        if (!$transaction || !in_array($transaction->getStatus(), [Transaction::CONFIRMED, Transaction::WAITING], true)) {
+            return null;
+        }
+
+        $zahlsDbService->lockCart($cartId);
+        try {
+            $order = Order::getByCartId($cartId);
+            if (!$order) {
+                $paymentMethod = ZahlsConfig::getPaymentMethodNameByPm($zahlsDbService->getPaymentMethodByCartId($cartId));
+                $zahlsOrderService->createOrder(
+                    $cartId,
+                    $zahlsOrderService->getPrestaStatusByZahlsStatus($transaction->getStatus()),
+                    $transaction->getAmount(),
+                    $paymentMethod,
+                    ['transaction_id' => $transaction->getId()]
+                );
+                $order = Order::getByCartId($cartId);
+            }
+        } finally {
+            $zahlsDbService->unlockCart($cartId);
+        }
+
+        return $order ?: null;
     }
 
     /**

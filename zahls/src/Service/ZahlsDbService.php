@@ -80,4 +80,42 @@ class ZahlsDbService
             WHERE id_cart = ' . (int) $idCart
         );
     }
+
+    /**
+     * Serialises order creation for a cart between the webhook and the customer's return
+     *
+     * @param int $idCart cart id
+     * @return bool
+     */
+    public function lockCart($idCart): bool
+    {
+        return (bool) \Db::getInstance()->getValue(
+            'SELECT GET_LOCK(\'' . pSQL(_DB_PREFIX_ . 'zahls_cart_' . (int) $idCart) . '\', 15)'
+        );
+    }
+
+    /**
+     * @param int $idCart cart id
+     * @return void
+     */
+    public function unlockCart($idCart)
+    {
+        \Db::getInstance()->getValue(
+            'SELECT RELEASE_LOCK(\'' . pSQL(_DB_PREFIX_ . 'zahls_cart_' . (int) $idCart) . '\')'
+        );
+    }
+
+    /**
+     * @param string $orderReference order reference
+     * @param int|string $transactionId zahls transaction id
+     * @return bool
+     */
+    public function hasOrderPayment($orderReference, $transactionId): bool
+    {
+        return (bool) \Db::getInstance()->getValue('
+            SELECT id_order_payment FROM `' . _DB_PREFIX_ . 'order_payment`
+            WHERE order_reference = \'' . pSQL($orderReference) . '\'
+            AND transaction_id = \'' . pSQL((string) $transactionId) . '\''
+        );
+    }
 }
