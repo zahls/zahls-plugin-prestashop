@@ -63,28 +63,48 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
         if (version_compare(_PS_VERSION_, '1.7.6', '<')) {
             $zahlsOrderService = new ZahlsOrderService();
             $zahlsDbService = new ZahlsDbService();
+            $zahlsApiService = new ZahlsApiService();
         } else {
             $zahlsOrderService = $this->get('zahls.zahlspaymentgateway.zahlsorderservice');
             $zahlsDbService = $this->get('zahls.zahlspaymentgateway.zahlsdbservice');
+            $zahlsApiService = $this->get('zahls.zahlspaymentgateway.zahlsapiservice');
         }
 
-        $transaction = $this->getTransactionData();
+        // The webhook is unsigned: only its transaction id is used, everything else comes from the API
+        $requestTransaction = $this->getTransactionData();
+        if (!$requestTransaction || empty($requestTransaction['id']) || empty($requestTransaction['status'])) {
+            return;
+        }
+        $transaction = $zahlsApiService->getZahlsTransaction((int) $requestTransaction['id']);
         if (!$transaction) {
+            throw new Exception('Transaction ' . (int) $requestTransaction['id'] . ' could not be loaded from zahls');
+        }
+        $transactionStatus = (string) $transaction->getStatus();
+        if ($transactionStatus === '' || $transactionStatus !== $requestTransaction['status']) {
+            // outdated or forged status
             return;
         }
-        $cartId = (int) ($transaction['invoice']['referenceId'] ?? 0);
-        $requestStatus = $transaction['status'] ?? null;
 
-        if (!$this->validRequest($transaction, $cartId, $requestStatus)) {
+        $cartId = $this->getCartId($transaction, $requestTransaction, $zahlsDbService);
+        $gateway = $cartId ? $zahlsApiService->getZahlsGateway((int) $zahlsDbService->getCartGatewayId($cartId)) : null;
+        if (!$gateway || $this->isTransactionOfGateway($gateway, (int) $transaction->getId()) === false) {
+            PrestaShopLogger::addLog(
+                'zahls webhook: transaction ' . (int) $transaction->getId() . ' does not belong to a gateway of cart ' . $cartId,
+                2
+            );
             return;
         }
 
-        if (!$prestaStatus = $zahlsOrderService->getPrestaStatusByZahlsStatus($requestStatus)) {
+        if (!$prestaStatus = $zahlsOrderService->getPrestaStatusByZahlsStatus($transactionStatus)) {
             return;
         }
 
         $pm = $zahlsDbService->getPaymentMethodByCartId($cartId);
         $paymentMethod = ZahlsConfig::getPaymentMethodNameByPm($pm);
+        $payment = [
+            'id' => (int) $transaction->getId(),
+            'amount' => (int) round((float) $transaction->getAmount()),
+        ];
 
         // The customer's return (validation controller) may create the order at the same time
         $zahlsDbService->lockCart($cartId);
@@ -93,14 +113,14 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
 
             // Create order if transaction successful
             if (!$order) {
-                if (in_array($requestStatus, [Transaction::CONFIRMED, Transaction::WAITING])) {
+                if (in_array($transactionStatus, [Transaction::CONFIRMED, Transaction::WAITING])) {
                     $zahlsOrderService->createOrder(
                         $cartId,
                         $prestaStatus,
-                        $transaction['amount'],
+                        $payment['amount'],
                         $paymentMethod,
                         [
-                            'transaction_id' => $transaction['id'],
+                            'transaction_id' => $payment['id'],
                         ]
                     );
                 }
@@ -113,12 +133,12 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
             }
 
             // Order created before the payment: record the payment once
-            if ($requestStatus === Transaction::CONFIRMED
-                && !$zahlsDbService->hasOrderPayment($order->reference, $transaction['id'])
+            if ($transactionStatus === Transaction::CONFIRMED
+                && !$zahlsDbService->hasOrderPayment($order->reference, $payment['id'])
             ) {
                 $zahlsOrderService->createOrderPayment(
                     $order,
-                    $transaction,
+                    $payment,
                     $paymentMethod
                 );
             }
@@ -132,41 +152,55 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
         }
     }
 
-    private function validRequest($transaction, $cartId, $requestStatus): bool
+    /**
+     * The gateway carries the cart id as referenceId. Depending on the transaction type zahls returns
+     * it at the top level of the transaction, in its invoice, or both.
+     *
+     * @param Transaction $transaction transaction loaded from the API
+     * @param array $requestTransaction webhook payload
+     * @param ZahlsDbService $zahlsDbService
+     * @return int
+     */
+    private function getCartId($transaction, array $requestTransaction, $zahlsDbService): int
     {
-        // check required data
-        if (!$cartId || !$requestStatus || empty($transaction['id'])) {
-            return false;
+        $invoice = $transaction->getInvoice();
+        $candidates = [
+            $transaction->getReferenceId(),
+            is_array($invoice) ? ($invoice['referenceId'] ?? null) : null,
+            $requestTransaction['referenceId'] ?? null,
+            $requestTransaction['invoice']['referenceId'] ?? null,
+        ];
+        foreach ($candidates as $candidate) {
+            if ((int) $candidate > 0) {
+                return (int) $candidate;
+            }
         }
 
-        if (version_compare(_PS_VERSION_, '1.7.6', '<')) {
-            $zahlsApiService = new ZahlsApiService();
-        } else {
-            $zahlsApiService = $this->get('zahls.zahlspaymentgateway.zahlsapiservice');
-        }
-        $gateway = $zahlsApiService->getZahlsGateway((int) ($transaction['invoice']['paymentRequestId'] ?? 0));
+        // Last resort: the gateway the cart was paid with
+        $gatewayId = is_array($invoice) ? (int) ($invoice['paymentRequestId'] ?? 0) : 0;
+        $gatewayId = $gatewayId ?: (int) ($requestTransaction['invoice']['paymentRequestId'] ?? 0);
 
-        // Validate request by gateway ID
-        if (!$gateway) {
-            PrestaShopLogger::addLog('GATEWAY FOR CART ID: ' . $cartId . ' NOT FOUND');
-        }
+        return $gatewayId ? (int) $zahlsDbService->getGatewayCartId($gatewayId) : 0;
+    }
 
-        $transactionObj = $zahlsApiService->getZahlsTransaction($transaction['id']);
-        if (!$transactionObj) {
-            throw new Exception('Transaction ' . (int) $transaction['id'] . ' could not be loaded from zahls');
-        }
-
-        $zahlsAmount = $transactionObj->getAmount();
-
-        if (empty($zahlsAmount) || $zahlsAmount !== (int) $transaction['amount']) {
-            return false;
-        }
-
-        $zahlsStatus = $transactionObj->getStatus();
-        if (empty($zahlsStatus) || $zahlsStatus !== $requestStatus) {
-            return false;
+    /**
+     * @param \Zahls\Models\Response\Gateway $gateway
+     * @param int $transactionId
+     * @return bool|null null if the gateway does not list its transactions
+     */
+    private function isTransactionOfGateway($gateway, int $transactionId)
+    {
+        $listed = false;
+        foreach ($gateway->getInvoices() ?: [] as $invoice) {
+            foreach ($invoice['transactions'] ?? [] as $gatewayTransaction) {
+                $listed = true;
+                if ((int) ($gatewayTransaction['id'] ?? 0) === $transactionId) {
+                    return true;
+                }
+            }
         }
 
-        return true;
+        // The transaction itself was loaded from zahls by its id and names this cart
+        return $listed ? false : null;
     }
 }

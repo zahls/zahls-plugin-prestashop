@@ -20,6 +20,7 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
     const ERROR_CONFIG = 'config';
     const ERROR_CANCEL = 'cancel';
     const ERROR_FAIL = 'fail';
+    const RETURN_ATTEMPTS = 5;
 
     public function __construct()
     {
@@ -44,15 +45,27 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
         }
         $gatewayId = (int) $this->context->cookie->paymentId;
         $cartId = $zahlsDbService->getGatewayCartId($gatewayId);
-        if (!$cartId) {
+        if (!$cartId && $this->context->cart && $this->context->cart->id) {
+            // Cookie without the gateway (e.g. lost on the way back): use the customer's cart
+            $cartId = (int) $this->context->cart->id;
+            $gatewayId = (int) $zahlsDbService->getCartGatewayId($cartId);
+        }
+        if (!$cartId || !$gatewayId) {
             $this->handleError(self::ERROR_CONFIG);
         }
 
+        // zahls redirects the customer right after the payment, usually before its webhook arrived:
+        // create the order from the transaction confirmed by zahls. The confirmation can lag a few
+        // seconds behind the redirect (e.g. TWINT), so look again before giving up.
         $order = Order::getByCartId($cartId);
-        if (!$order) {
-            // zahls redirects the customer right after the payment, usually before its
-            // webhook arrived: create the order from the transaction confirmed by zahls
-            $order = $this->createOrderFromGateway($gatewayId, $cartId, $zahlsApiService, $zahlsDbService, $zahlsOrderService);
+        for ($attempt = 0; !$order && $attempt < self::RETURN_ATTEMPTS; ++$attempt) {
+            if ($attempt > 0) {
+                sleep(2);
+                $order = Order::getByCartId($cartId);
+            }
+            if (!$order) {
+                $order = $this->createOrderFromGateway($gatewayId, $cartId, $zahlsApiService, $zahlsDbService, $zahlsOrderService);
+            }
         }
 
         // Redirect to success page if successful order already exists
@@ -80,11 +93,24 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
     private function createOrderFromGateway($gatewayId, $cartId, $zahlsApiService, $zahlsDbService, $zahlsOrderService)
     {
         $gateway = $zahlsApiService->getZahlsGateway($gatewayId);
-        if (!$gateway || (int) $gateway->getReferenceId() !== (int) $cartId) {
+        if (!$gateway) {
+            $this->log('gateway ' . (int) $gatewayId . ' of cart ' . (int) $cartId . ' not found');
+
+            return null;
+        }
+        // The gateway id comes from this cart; a reference, when zahls returns one, must match
+        if ((string) $gateway->getReferenceId() !== '' && (int) $gateway->getReferenceId() !== (int) $cartId) {
+            $this->log('gateway ' . (int) $gatewayId . ' belongs to reference "' . $gateway->getReferenceId() . '", not cart ' . (int) $cartId);
+
             return null;
         }
         $transaction = $zahlsApiService->getTransactionByGateway($gateway);
         if (!$transaction || !in_array($transaction->getStatus(), [Transaction::CONFIRMED, Transaction::WAITING], true)) {
+            $this->log(
+                'no paid transaction yet for gateway ' . (int) $gatewayId . ' (gateway status "' . $gateway->getStatus()
+                . '", transaction status "' . ($transaction ? $transaction->getStatus() : '-') . '")'
+            );
+
             return null;
         }
 
@@ -107,6 +133,11 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
         }
 
         return $order ?: null;
+    }
+
+    private function log(string $message)
+    {
+        PrestaShopLogger::addLog('zahls return: ' . $message, 2, null, 'Cart', null, true);
     }
 
     /**
