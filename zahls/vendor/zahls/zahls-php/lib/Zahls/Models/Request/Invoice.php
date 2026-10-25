@@ -386,7 +386,7 @@ class Invoice extends Base
         $this->expirationDate = $expirationDate;
     }
 
-    public function getResponseModel(): ResponseInvoice
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponseInvoice();
     }

@@ -38,7 +38,7 @@ class AuthToken extends Base
         $this->userId = $userId;
     }
 
-    public function getResponseModel(): ResponseAuthToken
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponseAuthToken();
     }

@@ -316,7 +316,7 @@ class Bill extends Base
         $this->limit = $limit;
     }
 
-    public function getResponseModel(): ResponseBill
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponseBill();
     }

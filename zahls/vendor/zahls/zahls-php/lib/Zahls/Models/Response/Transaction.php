@@ -18,19 +18,19 @@ namespace Zahls\Models\Response;
 class Transaction extends \Zahls\Models\Request\Transaction
 {
 
-    private $time;
-    private $status;
-    private $lang;
-    private $psp;
-    private $pspId;
-    private $mode;
-    private $payment;
-    private $invoice;
-    private $contact;
-    private $pageUuid;
-    private $fee;
-    private $refundable;
-    private $partiallyRefundable;
+    protected $time;
+    protected $status;
+    protected $lang;
+    protected $psp;
+    protected $pspId;
+    protected $mode;
+    protected $payment;
+    protected $invoice;
+    protected $contact;
+    protected $pageUuid;
+    protected $fee;
+    protected $refundable;
+    protected $partiallyRefundable;
 
     public const CONFIRMED = 'confirmed';
     public const INITIATED = 'initiated';

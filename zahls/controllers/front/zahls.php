@@ -38,7 +38,7 @@ class zahlszahlsModuleFrontController extends ModuleFrontController
 
             $order = Order::getByCartId($context->cart->id);
             if (\Configuration::get('ZAHLS_CREATE_ORDER_BEFORE_PAYMENT') == 1 && !$order) {
-                $pm = Tools::getValue('zahlsPaymentMethod');
+                $pm = (string) Tools::getValue('zahlsPaymentMethod');
                 $paymentMethod = ZahlsConfig::getPaymentMethodNameByPm($pm);
                 $zahlsModule = \Module::getInstanceByName('zahls');
                 $zahlsModule->validateOrder(
@@ -88,7 +88,10 @@ class zahlszahlsModuleFrontController extends ModuleFrontController
             if ($gatewayId = $zahlsDbService->getCartGatewayId($cart->id)) {
                 $zahlsApiService->deleteZahlsGateway($gatewayId);
             }
-            $paymentMethod = Tools::getValue('zahlsPaymentMethod');
+            $paymentMethod = (string) Tools::getValue('zahlsPaymentMethod');
+            if (!array_key_exists($paymentMethod, ZahlsConfig::getPaymentMethods())) {
+                throw new ZahlsException('Unknown payment method');
+            }
             $pm = ($paymentMethod != 'zahls') ? [$paymentMethod] : [];
 
             $metaData['X-Shop-Version'] = (string) _PS_VERSION_;

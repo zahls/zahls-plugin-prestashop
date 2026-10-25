@@ -54,7 +54,7 @@ class PaymentProvider extends Base
         $this->activePaymentMethods = $activePaymentMethods;
     }
 
-    public function getResponseModel(): ResponsePaymentProvider
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponsePaymentProvider();
     }

@@ -28,9 +28,9 @@ class ZahlsDbService
         }
         return \Db::getInstance(_PS_USE_SQL_SLAVE_)->execute('
             INSERT INTO `' . _DB_PREFIX_ . 'zahls_gateway` (`id_cart`, `id_gateway`, `pm`)
-            VALUES (' . (int) $idCart . ',' . (int) $idGateway . ',\'' . $paymentMethod . '\')'
+            VALUES (' . (int) $idCart . ',' . (int) $idGateway . ',\'' . pSQL($paymentMethod) . '\')'
             . ' ON DUPLICATE KEY UPDATE id_gateway = ' . (int) $idGateway
-            . ', pm = \'' . $paymentMethod . '\''
+            . ', pm = \'' . pSQL($paymentMethod) . '\''
         );
     }
 

@@ -401,7 +401,7 @@ class Design extends Base
         $this->limit = $limit;
     }
 
-    public function getResponseModel(): ResponseDesign
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponseDesign();
     }

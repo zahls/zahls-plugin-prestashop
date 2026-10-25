@@ -68,7 +68,7 @@ class Payout extends Base
         $this->statementDescriptor = $statementDescriptor;
     }
 
-    public function getResponseModel(): ResponsePayout
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponsePayout();
     }
