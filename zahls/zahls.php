@@ -36,7 +36,7 @@ class Zahls extends PaymentModule
         $this->name = 'zahls';
         $this->tab = 'payments_gateways';
         $this->module_key = '0c4dbfccbd85dd948fd9a13d5a4add90';
-        $this->version = '1.6.10';
+        $this->version = '1.6.11';
         $this->author = 'zahls';
         $this->is_eu_compatible = 1;
         $this->ps_versions_compliancy = ['min' => '8.0'];
