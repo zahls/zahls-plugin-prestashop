@@ -247,7 +247,7 @@ class Transaction extends Base
     /**
      * {@inheritdoc}
      */
-    public function getResponseModel(): ResponseTransaction
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponseTransaction();
     }

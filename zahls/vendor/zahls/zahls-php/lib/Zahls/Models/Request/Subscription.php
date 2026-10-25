@@ -163,7 +163,7 @@ class Subscription extends Base
         $this->limit = $limit;
     }
 
-    public function getResponseModel(): ResponseSubscription
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponseSubscription();
     }

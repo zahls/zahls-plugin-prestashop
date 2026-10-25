@@ -903,7 +903,7 @@ class Gateway extends Base
     /**
      * {@inheritdoc}
      */
-    public function getResponseModel(): ResponseGateway
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponseGateway();
     }

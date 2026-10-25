@@ -271,7 +271,7 @@ class Page extends Base
         ];
     }
 
-    public function getResponseModel(): ResponsePage
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponsePage();
     }

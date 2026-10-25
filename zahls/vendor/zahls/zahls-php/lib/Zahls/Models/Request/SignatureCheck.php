@@ -20,7 +20,7 @@ use Zahls\Models\Response\SignatureCheck as ResponseSignatureCheck;
  */
 class SignatureCheck extends Base
 {
-    public function getResponseModel(): ResponseSignatureCheck
+    public function getResponseModel(): \Zahls\Models\Base
     {
         return new ResponseSignatureCheck();
     }

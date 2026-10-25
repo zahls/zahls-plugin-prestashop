@@ -27,10 +27,32 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
         try {
             $this->processWebhook();
             echo 'Webhook processed successfully';
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            // Non-2xx so that zahls retries the webhook
+            http_response_code(500);
+            PrestaShopLogger::addLog('zahls webhook: ' . $e->getMessage(), 3, null, 'Cart', null, true);
             echo 'Webhook Error: ' . $e->getMessage();
         }
         exit; // Avoid template load error.
+    }
+
+    /**
+     * Webhook payload: "Normal (PHP-Post)" form data or JSON
+     *
+     * @return array|null
+     */
+    private function getTransactionData()
+    {
+        $transaction = Tools::getValue('transaction');
+        if (is_array($transaction)) {
+            return $transaction;
+        }
+        $body = json_decode((string) Tools::file_get_contents('php://input'), true);
+        if (is_array($body) && isset($body['transaction']) && is_array($body['transaction'])) {
+            return $body['transaction'];
+        }
+
+        return null;
     }
 
     /**
@@ -46,10 +68,12 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
             $zahlsDbService = $this->get('zahls.zahlspaymentgateway.zahlsdbservice');
         }
 
-        $transaction = Tools::getValue('transaction');
-        $cartId = $transaction['invoice']['referenceId'];
-        $requestStatus = $transaction['status'];
-        $order = Order::getByCartId($cartId);
+        $transaction = $this->getTransactionData();
+        if (!$transaction) {
+            return;
+        }
+        $cartId = (int) ($transaction['invoice']['referenceId'] ?? 0);
+        $requestStatus = $transaction['status'] ?? null;
 
         if (!$this->validRequest($transaction, $cartId, $requestStatus)) {
             return;
@@ -62,40 +86,56 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
         $pm = $zahlsDbService->getPaymentMethodByCartId($cartId);
         $paymentMethod = ZahlsConfig::getPaymentMethodNameByPm($pm);
 
-        // Create order if transaction successful
-        if (!$order && in_array($requestStatus, [Transaction::CONFIRMED, Transaction::WAITING])) {
-            $zahlsOrderService->createOrder(
-                $cartId,
-                $prestaStatus,
-                $transaction['amount'],
-                $paymentMethod,
-                [
-                    'transaction_id' => $transaction['id'],
-                ]
-            );
-            return;
-        } else {
-            $zahlsOrderService->createOrderPayment(
-                $order,
-                $transaction,
-                $paymentMethod
-            );
-        }
+        // The customer's return (validation controller) may create the order at the same time
+        $zahlsDbService->lockCart($cartId);
+        try {
+            $order = Order::getByCartId($cartId);
 
-        if ($order->module !== $this->module->name) {
-            return;
-        }
+            // Create order if transaction successful
+            if (!$order) {
+                if (in_array($requestStatus, [Transaction::CONFIRMED, Transaction::WAITING])) {
+                    $zahlsOrderService->createOrder(
+                        $cartId,
+                        $prestaStatus,
+                        $transaction['amount'],
+                        $paymentMethod,
+                        [
+                            'transaction_id' => $transaction['id'],
+                        ]
+                    );
+                }
 
-        // Update status if transition allowed
-        if ($order && $zahlsOrderService->transitionAllowed($prestaStatus, $order->current_state)) {
-            $zahlsOrderService->updateOrderStatus($prestaStatus, $order);
+                return;
+            }
+
+            if ($order->module !== $this->module->name) {
+                return;
+            }
+
+            // Order created before the payment: record the payment once
+            if ($requestStatus === Transaction::CONFIRMED
+                && !$zahlsDbService->hasOrderPayment($order->reference, $transaction['id'])
+            ) {
+                $zahlsOrderService->createOrderPayment(
+                    $order,
+                    $transaction,
+                    $paymentMethod
+                );
+            }
+
+            // Update status if transition allowed
+            if ($zahlsOrderService->transitionAllowed($prestaStatus, $order->current_state)) {
+                $zahlsOrderService->updateOrderStatus($prestaStatus, $order);
+            }
+        } finally {
+            $zahlsDbService->unlockCart($cartId);
         }
     }
 
     private function validRequest($transaction, $cartId, $requestStatus): bool
     {
         // check required data
-        if (!$cartId || !$requestStatus || !$transaction['id']) {
+        if (!$cartId || !$requestStatus || empty($transaction['id'])) {
             return false;
         }
 
@@ -104,14 +144,17 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
         } else {
             $zahlsApiService = $this->get('zahls.zahlspaymentgateway.zahlsapiservice');
         }
-        $gateway = $zahlsApiService->getZahlsGateway((int) $transaction['invoice']['paymentRequestId']);
+        $gateway = $zahlsApiService->getZahlsGateway((int) ($transaction['invoice']['paymentRequestId'] ?? 0));
 
         // Validate request by gateway ID
         if (!$gateway) {
-            PrestaShopLoggerCore::addLog('GATEWAY FOR CART ID: ' . $cartId . ' NOT FOUND');
+            PrestaShopLogger::addLog('GATEWAY FOR CART ID: ' . $cartId . ' NOT FOUND');
         }
 
         $transactionObj = $zahlsApiService->getZahlsTransaction($transaction['id']);
+        if (!$transactionObj) {
+            throw new Exception('Transaction ' . (int) $transaction['id'] . ' could not be loaded from zahls');
+        }
 
         $zahlsAmount = $transactionObj->getAmount();
 

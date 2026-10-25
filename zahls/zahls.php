@@ -36,7 +36,7 @@ class Zahls extends PaymentModule
         $this->name = 'zahls';
         $this->tab = 'payments_gateways';
         $this->module_key = '0c4dbfccbd85dd948fd9a13d5a4add90';
-        $this->version = '1.6.10';
+        $this->version = '1.6.11';
         $this->author = 'zahls';
         $this->is_eu_compatible = 1;
         $this->ps_versions_compliancy = ['min' => '8.0'];
@@ -61,6 +61,7 @@ class Zahls extends PaymentModule
              || !$this->installDb()
              || !$this->registerHook('paymentOptions')
              || !$this->registerHook('actionFrontControllerSetMedia')
+             || !$this->registerHook('actionDispatcherBefore')
         ) {
             return false;
         }
@@ -425,6 +426,25 @@ class Zahls extends PaymentModule
         }
 
         return $paymentMethods;
+    }
+
+    /**
+     * "Connect With Platform" registers the integration webhook under the legacy module
+     * path /module/payrexx/gateway; dispatch it to this module's webhook controller.
+     *
+     * @param array $params
+     */
+    public function hookActionDispatcherBefore(array $params)
+    {
+        if (($params['controller_type'] ?? null) !== Dispatcher::FC_MODULE
+            || Tools::getValue('module') !== 'payrexx'
+            || strtolower((string) Tools::getValue('controller')) !== 'gateway'
+            || Module::isInstalled('payrexx')
+        ) {
+            return;
+        }
+        $_GET['module'] = $this->name;
+        unset($_POST['module']);
     }
 
     public function hookActionAdminControllerSetMedia(array $params)
