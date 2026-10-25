@@ -36,7 +36,7 @@ class Zahls extends PaymentModule
         $this->name = 'zahls';
         $this->tab = 'payments_gateways';
         $this->module_key = '0c4dbfccbd85dd948fd9a13d5a4add90';
-        $this->version = '1.6.11';
+        $this->version = '1.6.12';
         $this->author = 'zahls';
         $this->is_eu_compatible = 1;
         $this->ps_versions_compliancy = ['min' => '8.0'];
@@ -55,7 +55,6 @@ class Zahls extends PaymentModule
      */
     public function install()
     {
-        Configuration::updateValue('ZAHLS_PLATFORM', 'zahls.ch');
         // Install default
         if (!parent::install()
              || !$this->installDb()
@@ -86,7 +85,7 @@ class Zahls extends PaymentModule
      */
     public function uninstall()
     {
-        $config = ZahlsConfig::getConfigKeys();
+        $config = array_merge(ZahlsConfig::getConfigKeys(), ['ZAHLS_PLATFORM']);
         foreach ($config as $var) {
             Configuration::deleteByName($var);
         }
@@ -123,13 +122,6 @@ class Zahls extends PaymentModule
             $this->registerHook('actionAdminControllerSetMedia');
         }
 
-        foreach (ZahlsConfig::getPlatforms() as $url => $platformName) {
-            $platforms[] = [
-                'url' => $url,
-                'name' => $platformName,
-            ];
-        }
-
         $fields_form = [];
         $fields_form[0]['form'] = [
             'legend' => [
@@ -137,19 +129,6 @@ class Zahls extends PaymentModule
                 'icon' => 'icon-cogs',
             ],
             'input' => [
-                [
-                    'type' => 'select',
-                    'label' => 'Payment Platform',
-                    'name' => 'zahls_platform',
-                    'id' => 'zahls-platform-select',
-                    'desc' => 'Choose the platform provider from the list',
-                    'multiple' => false,
-                    'options' => [
-                        'query' => $platforms,
-                        'id' => 'url',
-                        'name' => 'name',
-                    ],
-                ],
                 [
                     'type' => 'text',
                     'label' => 'API Secret',
@@ -198,7 +177,7 @@ class Zahls extends PaymentModule
             ],
             'buttons' => [
                 [
-                    'title' => 'Connect With Platform',
+                    'title' => 'Connect with zahls.ch',
                     'name' => 'connect_with_platform',
                     'id' => 'connect-with-platform-button',
                     'type' => 'button',
@@ -313,8 +292,7 @@ class Zahls extends PaymentModule
         $zahlsApiService = new ZahlsApiService();
         $signatureCheck = $zahlsApiService->validateSignature(
             Tools::getValue('zahls_instance_name'),
-            Tools::getValue('zahls_api_secret'),
-            Tools::getValue('zahls_platform')
+            Tools::getValue('zahls_api_secret')
         );
         if (!$signatureCheck) {
             $this->context->controller->errors[] = 'Please enter valid credentials! Try again.';

@@ -7,9 +7,7 @@
  */
 function connect() {
     const button = $('#connect-with-platform-button');
-    const platformUrl = $('#zahls-platform-select').val();
-
-    let popupWindow = createPopup(platformUrl);
+    let popupWindow = createPopup('zahls.ch');
 
     // Check if the popup is closed manually (i.e., without receiving a message)
     let popupCheck;
