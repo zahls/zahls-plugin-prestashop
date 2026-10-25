@@ -20,6 +20,7 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
     const ERROR_CONFIG = 'config';
     const ERROR_CANCEL = 'cancel';
     const ERROR_FAIL = 'fail';
+    const RETURN_ATTEMPTS = 5;
 
     public function __construct()
     {
@@ -44,15 +45,27 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
         }
         $gatewayId = (int) $this->context->cookie->paymentId;
         $cartId = $zahlsDbService->getGatewayCartId($gatewayId);
-        if (!$cartId) {
+        if (!$cartId && $this->context->cart && $this->context->cart->id) {
+            // Cookie without the gateway (e.g. lost on the way back): use the customer's cart
+            $cartId = (int) $this->context->cart->id;
+            $gatewayId = (int) $zahlsDbService->getCartGatewayId($cartId);
+        }
+        if (!$cartId || !$gatewayId) {
             $this->handleError(self::ERROR_CONFIG);
         }
 
+        // zahls redirects the customer right after the payment, usually before its webhook arrived:
+        // create the order from the transaction confirmed by zahls. The confirmation can lag a few
+        // seconds behind the redirect (e.g. TWINT), so look again before giving up.
         $order = Order::getByCartId($cartId);
-        if (!$order) {
-            // zahls redirects the customer right after the payment, usually before its
-            // webhook arrived: create the order from the transaction confirmed by zahls
-            $order = $this->createOrderFromGateway($gatewayId, $cartId, $zahlsApiService, $zahlsDbService, $zahlsOrderService);
+        for ($attempt = 0; !$order && $attempt < self::RETURN_ATTEMPTS; ++$attempt) {
+            if ($attempt > 0) {
+                sleep(2);
+                $order = Order::getByCartId($cartId);
+            }
+            if (!$order) {
+                $order = $this->createOrderFromGateway($gatewayId, $cartId, $zahlsApiService, $zahlsDbService, $zahlsOrderService);
+            }
         }
 
         // Redirect to success page if successful order already exists
