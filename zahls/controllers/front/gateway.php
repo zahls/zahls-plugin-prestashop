@@ -87,7 +87,7 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
 
         $cartId = $this->getCartId($transaction, $requestTransaction, $zahlsDbService);
         $gateway = $cartId ? $zahlsApiService->getZahlsGateway((int) $zahlsDbService->getCartGatewayId($cartId)) : null;
-        if (!$gateway || !$this->isTransactionOfGateway($gateway, (int) $transaction->getId())) {
+        if (!$gateway || $this->isTransactionOfGateway($gateway, (int) $transaction->getId()) === false) {
             PrestaShopLogger::addLog(
                 'zahls webhook: transaction ' . (int) $transaction->getId() . ' does not belong to a gateway of cart ' . $cartId,
                 2
@@ -186,18 +186,21 @@ class zahlsGatewayModuleFrontController extends ModuleFrontController
     /**
      * @param \Zahls\Models\Response\Gateway $gateway
      * @param int $transactionId
-     * @return bool
+     * @return bool|null null if the gateway does not list its transactions
      */
-    private function isTransactionOfGateway($gateway, int $transactionId): bool
+    private function isTransactionOfGateway($gateway, int $transactionId)
     {
+        $listed = false;
         foreach ($gateway->getInvoices() ?: [] as $invoice) {
             foreach ($invoice['transactions'] ?? [] as $gatewayTransaction) {
+                $listed = true;
                 if ((int) ($gatewayTransaction['id'] ?? 0) === $transactionId) {
                     return true;
                 }
             }
         }
 
-        return false;
+        // The transaction itself was loaded from zahls by its id and names this cart
+        return $listed ? false : null;
     }
 }

@@ -93,11 +93,24 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
     private function createOrderFromGateway($gatewayId, $cartId, $zahlsApiService, $zahlsDbService, $zahlsOrderService)
     {
         $gateway = $zahlsApiService->getZahlsGateway($gatewayId);
-        if (!$gateway || (int) $gateway->getReferenceId() !== (int) $cartId) {
+        if (!$gateway) {
+            $this->log('gateway ' . (int) $gatewayId . ' of cart ' . (int) $cartId . ' not found');
+
+            return null;
+        }
+        // The gateway id comes from this cart; a reference, when zahls returns one, must match
+        if ((string) $gateway->getReferenceId() !== '' && (int) $gateway->getReferenceId() !== (int) $cartId) {
+            $this->log('gateway ' . (int) $gatewayId . ' belongs to reference "' . $gateway->getReferenceId() . '", not cart ' . (int) $cartId);
+
             return null;
         }
         $transaction = $zahlsApiService->getTransactionByGateway($gateway);
         if (!$transaction || !in_array($transaction->getStatus(), [Transaction::CONFIRMED, Transaction::WAITING], true)) {
+            $this->log(
+                'no paid transaction yet for gateway ' . (int) $gatewayId . ' (gateway status "' . $gateway->getStatus()
+                . '", transaction status "' . ($transaction ? $transaction->getStatus() : '-') . '")'
+            );
+
             return null;
         }
 
@@ -120,6 +133,11 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
         }
 
         return $order ?: null;
+    }
+
+    private function log(string $message)
+    {
+        PrestaShopLogger::addLog('zahls return: ' . $message, 2, null, 'Cart', null, true);
     }
 
     /**
