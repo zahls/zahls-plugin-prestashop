@@ -22,9 +22,28 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
     const ERROR_FAIL = 'fail';
     const RETURN_ATTEMPTS = 5;
 
+    /** @var int cart of the customer's cookie, taken out of the cookie by init() */
+    private $returnCartId = 0;
+
     public function __construct()
     {
         parent::__construct();
+    }
+
+    /**
+     * The webhook usually creates the order before the customer returns. FrontController::init() would then
+     * log "Cart cannot be loaded or an order has already been placed using this cart" and drop the cart from
+     * the cookie; drop it here first, like PrestaShop's order confirmation page.
+     */
+    public function init()
+    {
+        $cookieCartId = (int) $this->context->cookie->id_cart;
+        if ($cookieCartId && (new Cart($cookieCartId))->orderExists()) {
+            $this->returnCartId = $cookieCartId;
+            unset($this->context->cookie->id_cart);
+        }
+
+        parent::init();
     }
 
     public function initContent()
@@ -45,10 +64,10 @@ class zahlsValidationModuleFrontController extends ModuleFrontController
         }
         $gatewayId = (int) $this->context->cookie->paymentId;
         $cartId = $zahlsDbService->getGatewayCartId($gatewayId);
-        if (!$cartId && $this->context->cart && $this->context->cart->id) {
+        if (!$cartId) {
             // Cookie without the gateway (e.g. lost on the way back): use the customer's cart
-            $cartId = (int) $this->context->cart->id;
-            $gatewayId = (int) $zahlsDbService->getCartGatewayId($cartId);
+            $cartId = $this->returnCartId ?: (int) ($this->context->cart->id ?? 0);
+            $gatewayId = $cartId ? (int) $zahlsDbService->getCartGatewayId($cartId) : 0;
         }
         if (!$cartId || !$gatewayId) {
             $this->handleError(self::ERROR_CONFIG);

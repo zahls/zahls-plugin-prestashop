@@ -17,6 +17,53 @@ class ZahlsConfig
     /** zahls.ch is the only platform: api.zahls.ch, login.zahls.ch */
     const PLATFORM = 'zahls.ch';
 
+    /** Title and description of the zahls.ch payment option in the checkout, per language */
+    const TITLE = 'ZAHLS_TITLE';
+    const DESCRIPTION = 'ZAHLS_DESCRIPTION';
+
+    /** Texts of the zahls.ch payment option before 1.6.14, translatable in the back office */
+    const LEGACY_TEXTS = [
+        self::TITLE => 'zahls.ch Payment Methods',
+        self::DESCRIPTION => 'zahls.ch payment method description',
+    ];
+
+    public static function getTextKeys(): array
+    {
+        return [self::TITLE, self::DESCRIPTION];
+    }
+
+    /**
+     * Default title and description of the zahls.ch payment option; English for languages without own texts.
+     *
+     * @param string $iso language ISO code
+     *
+     * @return array
+     */
+    public static function getDefaultTexts(string $iso): array
+    {
+        $texts = [
+            'de' => [
+                'Bezahlen mit zahls.ch',
+                'Sie werden zur sicheren Zahlungsseite von zahls.ch weitergeleitet und wählen dort Ihre Zahlungsart.',
+            ],
+            'fr' => [
+                'Payer avec zahls.ch',
+                'Vous serez redirigé vers la page de paiement sécurisée de zahls.ch, où vous choisirez votre moyen de paiement.',
+            ],
+            'it' => [
+                'Paga con zahls.ch',
+                'Verrà reindirizzato alla pagina di pagamento sicura di zahls.ch, dove sceglierà il metodo di pagamento.',
+            ],
+            'en' => [
+                'Pay with zahls.ch',
+                'You will be redirected to the secure zahls.ch payment page, where you choose your payment method.',
+            ],
+        ];
+        [$title, $description] = $texts[strtolower($iso)] ?? $texts['en'];
+
+        return [self::TITLE => $title, self::DESCRIPTION => $description];
+    }
+
     public static function getConfigKeys(): array
     {
         return [
