@@ -69,8 +69,9 @@ class Zahls extends PaymentModule
     }
 
     /**
-     * Back-office translation of a text of this module (translations/<iso>.php). The file is read, not included:
-     * PrestaShop merges included translation files of all languages into one global array.
+     * Back-office translation of a text of this module, from the files PrestaShop reads for $this->l(); a theme's
+     * file wins over the module's. The files are read, not included: PrestaShop merges included translation files
+     * of all languages into one global array.
      *
      * @param string $text
      * @param string $iso
@@ -79,18 +80,26 @@ class Zahls extends PaymentModule
      */
     private function getLegacyTranslation(string $text, string $iso)
     {
-        $file = _PS_MODULE_DIR_ . $this->name . '/translations/' . basename(strtolower($iso)) . '.php';
-        if (!is_file($file)) {
-            return null;
+        $iso = basename(strtolower($iso));
+        $files = [];
+        if (defined('_PS_THEME_DIR_')) {
+            $files[] = _PS_THEME_DIR_ . 'modules/' . $this->name . '/' . $iso . '.php';
+            $files[] = _PS_THEME_DIR_ . 'modules/' . $this->name . '/translations/' . $iso . '.php';
         }
+        $files[] = _PS_MODULE_DIR_ . $this->name . '/' . $iso . '.php';
+        $files[] = _PS_MODULE_DIR_ . $this->name . '/translations/' . $iso . '.php';
         $pattern = '/\$_MODULE\[\'<\{' . preg_quote($this->name, '/') . '\}[^>]*>' . preg_quote($this->name, '/')
             . '_' . md5($text) . '\'\]\s*=\s*\'((?:[^\'\\\\]|\\\\.)*)\'\s*;/';
-        if (!preg_match($pattern, (string) file_get_contents($file), $match)) {
-            return null;
+        foreach ($files as $file) {
+            if (is_file($file) && preg_match($pattern, (string) file_get_contents($file), $match)) {
+                $translation = stripslashes($match[1]);
+                if ($translation !== '' && $translation !== $text) {
+                    return $translation;
+                }
+            }
         }
-        $translation = stripslashes($match[1]);
 
-        return $translation !== '' && $translation !== $text ? $translation : null;
+        return null;
     }
 
     /**
@@ -106,8 +115,9 @@ class Zahls extends PaymentModule
         $value = Configuration::get($key, $idLang);
         $iso = (string) Language::getIsoById($idLang);
         if ($value === false) {
-            // Not saved in the module settings yet (e.g. right after the upgrade to 1.6.14, or a language
-            // installed later): the back-office translation of the text used before, else the default text
+            // Not saved in the module settings yet (e.g. right after the upgrade to 1.6.14): the back-office
+            // translation of the text used before, else the default text. A language installed after saving
+            // starts with a copy of the default language's text, like any multilingual field in PrestaShop.
             $value = $this->getLegacyTranslation(ZahlsConfig::LEGACY_TEXTS[$key], $iso);
         }
         // An emptied title falls back to the default text, an emptied description hides it
@@ -383,6 +393,9 @@ class Zahls extends PaymentModule
             }
             Configuration::updateValue($textKey, $values);
         }
+        // Configuration::get() treats a key as multilingual only once loaded; keys created by this request
+        // would otherwise read as unset and the form would show the default texts instead of the saved ones
+        Configuration::loadConfiguration();
         $this->context->controller->confirmations[] = 'Settings are successfully updated.';
     }
 
