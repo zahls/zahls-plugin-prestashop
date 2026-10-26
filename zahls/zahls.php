@@ -61,36 +61,8 @@ class Zahls extends PaymentModule
              || !$this->registerHook('paymentOptions')
              || !$this->registerHook('actionFrontControllerSetMedia')
              || !$this->registerHook('actionDispatcherBefore')
-             || !$this->installTexts()
         ) {
             return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Stores the title and description of the zahls.ch payment option for every language that has none yet:
-     * the back-office translation of the texts used before 1.6.14 if there is one, otherwise the default text.
-     *
-     * @return bool
-     */
-    public function installTexts()
-    {
-        foreach (ZahlsConfig::getTextKeys() as $key) {
-            $values = [];
-            foreach (Language::getLanguages(false) as $language) {
-                $idLang = (int) $language['id_lang'];
-                $value = Configuration::get($key, $idLang);
-                if ($value === false) {
-                    $value = $this->getLegacyTranslation(ZahlsConfig::LEGACY_TEXTS[$key], $language['iso_code'])
-                        ?? ZahlsConfig::getDefaultTexts($language['iso_code'])[$key];
-                }
-                $values[$idLang] = $value;
-            }
-            if (!Configuration::updateValue($key, $values)) {
-                return false;
-            }
         }
 
         return true;
@@ -132,10 +104,15 @@ class Zahls extends PaymentModule
     public function getText(string $key, int $idLang): string
     {
         $value = Configuration::get($key, $idLang);
-        // Languages installed after the module have no text yet; an emptied title falls back as well,
-        // an emptied description hides it
-        if ($value === false || ($value === '' && $key === ZahlsConfig::TITLE)) {
-            $value = ZahlsConfig::getDefaultTexts((string) Language::getIsoById($idLang))[$key];
+        $iso = (string) Language::getIsoById($idLang);
+        if ($value === false) {
+            // Not saved in the module settings yet (e.g. right after the upgrade to 1.6.14, or a language
+            // installed later): the back-office translation of the text used before, else the default text
+            $value = $this->getLegacyTranslation(ZahlsConfig::LEGACY_TEXTS[$key], $iso);
+        }
+        // An emptied title falls back to the default text, an emptied description hides it
+        if ($value === null || ($value === '' && $key === ZahlsConfig::TITLE)) {
+            $value = ZahlsConfig::getDefaultTexts($iso)[$key];
         }
 
         return (string) $value;
