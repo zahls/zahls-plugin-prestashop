@@ -36,7 +36,7 @@ class Zahls extends PaymentModule
         $this->name = 'zahls';
         $this->tab = 'payments_gateways';
         $this->module_key = '0c4dbfccbd85dd948fd9a13d5a4add90';
-        $this->version = '1.6.13';
+        $this->version = '1.6.14';
         $this->author = 'zahls';
         $this->is_eu_compatible = 1;
         $this->ps_versions_compliancy = ['min' => '8.0'];
@@ -69,6 +69,66 @@ class Zahls extends PaymentModule
     }
 
     /**
+     * Back-office translation of a text of this module, from the files PrestaShop reads for $this->l(); a theme's
+     * file wins over the module's. The files are read, not included: PrestaShop merges included translation files
+     * of all languages into one global array.
+     *
+     * @param string $text
+     * @param string $iso
+     *
+     * @return string|null
+     */
+    private function getLegacyTranslation(string $text, string $iso)
+    {
+        $iso = basename(strtolower($iso));
+        $files = [];
+        if (defined('_PS_THEME_DIR_')) {
+            $files[] = _PS_THEME_DIR_ . 'modules/' . $this->name . '/' . $iso . '.php';
+            $files[] = _PS_THEME_DIR_ . 'modules/' . $this->name . '/translations/' . $iso . '.php';
+        }
+        $files[] = _PS_MODULE_DIR_ . $this->name . '/' . $iso . '.php';
+        $files[] = _PS_MODULE_DIR_ . $this->name . '/translations/' . $iso . '.php';
+        $pattern = '/\$_MODULE\[\'<\{' . preg_quote($this->name, '/') . '\}[^>]*>' . preg_quote($this->name, '/')
+            . '_' . md5($text) . '\'\]\s*=\s*\'((?:[^\'\\\\]|\\\\.)*)\'\s*;/';
+        foreach ($files as $file) {
+            if (is_file($file) && preg_match($pattern, (string) file_get_contents($file), $match)) {
+                $translation = stripslashes($match[1]);
+                if ($translation !== '' && $translation !== $text) {
+                    return $translation;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Title or description of the zahls.ch payment option in the given language.
+     *
+     * @param string $key ZahlsConfig::TITLE or ZahlsConfig::DESCRIPTION
+     * @param int $idLang
+     *
+     * @return string
+     */
+    public function getText(string $key, int $idLang): string
+    {
+        $value = Configuration::get($key, $idLang);
+        $iso = (string) Language::getIsoById($idLang);
+        if ($value === false) {
+            // Not saved in the module settings yet (e.g. right after the upgrade to 1.6.14): the back-office
+            // translation of the text used before, else the default text. A language installed after saving
+            // starts with a copy of the default language's text, like any multilingual field in PrestaShop.
+            $value = $this->getLegacyTranslation(ZahlsConfig::LEGACY_TEXTS[$key], $iso);
+        }
+        // An emptied title falls back to the default text, an emptied description hides it
+        if ($value === null || ($value === '' && $key === ZahlsConfig::TITLE)) {
+            $value = ZahlsConfig::getDefaultTexts($iso)[$key];
+        }
+
+        return (string) $value;
+    }
+
+    /**
      * Install DataBase table
      *
      * @return bool if install was successfull
@@ -85,7 +145,7 @@ class Zahls extends PaymentModule
      */
     public function uninstall()
     {
-        $config = array_merge(ZahlsConfig::getConfigKeys(), ['ZAHLS_PLATFORM']);
+        $config = array_merge(ZahlsConfig::getConfigKeys(), ZahlsConfig::getTextKeys(), ['ZAHLS_PLATFORM']);
         foreach ($config as $var) {
             Configuration::deleteByName($var);
         }
@@ -174,6 +234,20 @@ class Zahls extends PaymentModule
                         ],
                     ],
                 ],
+                [
+                    'type' => 'text',
+                    'label' => 'Title',
+                    'name' => 'zahls_title',
+                    'lang' => true,
+                    'desc' => 'Name of the zahls.ch payment option in the checkout.',
+                ],
+                [
+                    'type' => 'textarea',
+                    'label' => 'Description',
+                    'name' => 'zahls_description',
+                    'lang' => true,
+                    'desc' => 'Shown in the checkout when the customer selects the zahls.ch payment option. Leave empty to show none.',
+                ],
             ],
             'buttons' => [
                 [
@@ -194,7 +268,15 @@ class Zahls extends PaymentModule
         foreach (ZahlsConfig::getConfigKeys() as $configKey) {
             $fieldsValue[strtolower($configKey)] = Configuration::get($configKey);
         }
+        $languages = Language::getLanguages(false);
+        foreach (ZahlsConfig::getTextKeys() as $textKey) {
+            foreach ($languages as $language) {
+                $fieldsValue[strtolower($textKey)][(int) $language['id_lang']] =
+                    $this->getText($textKey, (int) $language['id_lang']);
+            }
+        }
         $helper = new HelperForm();
+        $helper->languages = $this->context->controller->getLanguages();
         $helper->module = $this;
         $helper->name_controller = $this->name;
         $helper->token = Tools::getAdminTokenLite('AdminModules');
@@ -303,6 +385,17 @@ class Zahls extends PaymentModule
             $configValue = Tools::getValue(strtolower($configKey));
             Configuration::updateValue($configKey, $configValue);
         }
+        foreach (ZahlsConfig::getTextKeys() as $textKey) {
+            $values = [];
+            foreach (Language::getLanguages(false) as $language) {
+                $idLang = (int) $language['id_lang'];
+                $values[$idLang] = trim((string) Tools::getValue(strtolower($textKey) . '_' . $idLang));
+            }
+            Configuration::updateValue($textKey, $values);
+        }
+        // Configuration::get() treats a key as multilingual only once loaded; keys created by this request
+        // would otherwise read as unset and the form would show the default texts instead of the saved ones
+        Configuration::loadConfiguration();
         $this->context->controller->confirmations[] = 'Settings are successfully updated.';
     }
 
@@ -395,10 +488,15 @@ class Zahls extends PaymentModule
             );
             $paymentOption->setLogo($imageSrc);
             if ($paymentMethod['pm'] == 'zahls') {
+                $idLang = (int) $this->context->language->id;
                 $paymentOption->setLogo('');
-                $paymentOption->setAdditionalInformation(
-                    $this->l('zahls.ch payment method description')
-                );
+                $paymentOption->setCallToActionText($this->getText(ZahlsConfig::TITLE, $idLang));
+                $description = $this->getText(ZahlsConfig::DESCRIPTION, $idLang);
+                if ($description !== '') {
+                    $paymentOption->setAdditionalInformation(
+                        '<p>' . nl2br(htmlspecialchars($description, ENT_QUOTES, 'UTF-8')) . '</p>'
+                    );
+                }
             }
             $paymentMethods[] = $paymentOption;
         }

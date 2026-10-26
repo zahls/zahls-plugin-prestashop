@@ -2,7 +2,7 @@
 <module>
     <name>zahls</name>
     <displayName><![CDATA[zahls.ch]]></displayName>
-    <version><![CDATA[1.6.13]]></version>
+    <version><![CDATA[1.6.14]]></version>
     <description><![CDATA[Accept payments using    zahls Payment gateway]]></description>
     <author><![CDATA[zahls.ch]]></author>
     <tab><![CDATA[payments_gateways]]></tab>
